@@ -4,7 +4,7 @@ An enterprise-grade, high-velocity translation engine and virtualized tracking c
 
 ---
 
-## 💡 The Business Value Proposition (₹5,00,000+ INR SaaS Value)
+## 💡 The Business Value Proposition 
 
 In the United States healthcare infrastructure, hospitals send bills (EDI 837) to insurance companies and are often left completely in the dark. Billing teams wait weeks or months without knowing if a claim is clean, paused, or rejected. 
 
