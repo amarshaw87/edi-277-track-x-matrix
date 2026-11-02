@@ -1,0 +1,32 @@
+{
+  "A1": {
+    "status": "20",
+    "lane": "accepted",
+    "description": "Everything is clean, the insurance company successfully received the bill."
+  },
+  "A2": {
+    "status": "21",
+    "lane": "accepted",
+    "description": "Claim has been accepted and transferred to the local payer system."
+  },
+  "A3": {
+    "status": "45",
+    "lane": "rejected",
+    "description": "Entity validation failure. Missing or invalid national provider identifier."
+  },
+  "A7": {
+    "status": "122",
+    "lane": "rejected",
+    "description": "Global rejection. Total transaction broken due to unparseable data arrays."
+  },
+  "P1": {
+    "status": "24",
+    "lane": "pended",
+    "description": "Claim is paused. Medical records requested to prove clinical necessity."
+  },
+  "P2": {
+    "status": "11",
+    "lane": "pended",
+    "description": "Under review. Payer is determining primary vs secondary liability."
+  }
+}
