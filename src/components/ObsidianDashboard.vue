@@ -180,7 +180,10 @@ function handleManualFile(e: Event) {
  */
 function executePipelineParse(rawText: string, sourceName: string) {
   try {
-    const processedResults = parserEngine.parse(rawText);
+    // Normalize pasted multi-line breaks by removing extra newlines (\n or \r)
+    const normalizedText = rawText.replace(/\r?\n/g, '').trim();
+    
+    const processedResults = parserEngine.parse(normalizedText);
     claims.value = processedResults;
     statusMessage.value = `SUCCESS: [${sourceName}] translated cleanly. Generated ${processedResults.length} records.`;
   } catch (err) {
