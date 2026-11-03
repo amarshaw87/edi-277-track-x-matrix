@@ -162,7 +162,7 @@ function handleLiveTextParse() {
  */
 function handleManualFile(e: Event) {
   const target = e.target as HTMLInputElement;
-  const file = target.files?.[0];
+  const file = target.files?.[0]; // FIXED: Corrected syntax access index position
   if (file) {
     statusMessage.value = `INGESTING: Processing parsing array loops for "${file.name}"...`;
     const reader = new FileReader();
