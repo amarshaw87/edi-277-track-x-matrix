@@ -24,26 +24,58 @@
       </div>
     </header>
 
-    <!-- Interactive Drag-and-Drop Parsing Terminal Area -->
-    <div 
-      class="ingestion-dropzone-frame"
-      :class="{ 'drag-active': isDragOver }"
-      @dragover.prevent="toggleDragState(true)"
-      @dragleave.prevent="toggleDragState(false)"
-      @drop.prevent="handleFileDrop"
-    >
-      <div class="dropzone-internal-glow">
-        <div class="terminal-prompt-row">
+    <!-- Interactive Dual-Input Stream Panel and Progress Meter -->
+    <div class="ingestion-dropzone-frame interactive-stream-grid">
+      
+      <!-- Left Panel: Real-time Paste Action Box -->
+      <div class="stream-input-wrapper">
+        <div class="input-header-row">
           <span class="terminal-caret">$&gt;</span>
-          <p class="prompt-text-display">
-            {{ statusMessage || "DROP RAW MESSY EDI 277 TEXT FILE HERE FOR REAL-TIME DECOMPOSITION TRANSLATION" }}
-          </p>
+          <label class="prompt-text-display">PASTE OR WRITE RAW EDI 277 CODE STREAM</label>
         </div>
-        <label class="custom-file-upload-btn">
-          BROWSE FILES
-          <input type="file" class="hidden-file-input" @change="handleManualFile" accept=".txt,.edi,.dat" />
-        </label>
+        <textarea 
+          v-model="rawCodeText" 
+          @input="handleLiveTextParse"
+          placeholder="Paste ISA*00*... string data here for instant background engine clearance"
+          class="stream-code-textarea"
+        ></textarea>
+        
+        <!-- Quick File Action Triggers as a Secondary Option -->
+        <div class="alternative-action-footer">
+          <span class="status-msg-log">{{ statusMessage || "System running idle. Awaiting X12 records..." }}</span>
+          <label class="custom-file-upload-btn compact-btn">
+            OR BROWSE FILE
+            <input type="file" class="hidden-file-input" @change="handleManualFile" accept=".txt,.edi,.dat" />
+          </label>
+        </div>
       </div>
+
+      <!-- Right Panel: Visual Processing Metrics Pipeline Bar Meter -->
+      <div class="pipeline-progress-gauge">
+        <div class="hud-label-gauge">ENGINE TRANSMISSION STATE</div>
+        
+        <!-- Reactive Meter Track Canvas -->
+        <div class="meter-track-container">
+          <div 
+            :class="['meter-fill-bar', currentStateColor]" 
+            :style="{ width: pipelineProgressPercentage + '%' }"
+          ></div>
+          <span class="meter-overlay-text">{{ progressStatusLabel }}</span>
+        </div>
+
+        <!-- Telemetry Data Output Logs -->
+        <div class="telemetry-details">
+          <div class="telemetry-row">
+            <span>Envelope (ISA):</span>
+            <span :class="hasIsaSegment ? 'text-green' : 'text-gray'">{{ hasIsaSegment ? 'DETECTED' : 'MISSING' }}</span>
+          </div>
+          <div class="telemetry-row">
+            <span>Functional Group (GS):</span>
+            <span :class="hasGsSegment ? 'text-green' : 'text-gray'">{{ hasGsSegment ? 'DETECTED' : 'MISSING' }}</span>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Virtualized Visual Kanban Area Core Canvas Grid -->
@@ -52,7 +84,6 @@
     </main>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { ClaimCard } from '../utils/parser/types';
@@ -60,10 +91,47 @@ import { Edi277ParserCore } from '../utils/edi277ParserCore';
 import VirtualKanbanCanvas from './VirtualKanbanCanvas.vue';
 
 const claims = ref<ClaimCard[]>([]);
-const isDragOver = ref(false);
 const statusMessage = ref('');
+const rawCodeText = ref('');
 
 const parserEngine = new Edi277ParserCore();
+
+// Raw Text Stream Parsing Segment Telemetry Flags
+const hasIsaSegment = computed(() => rawCodeText.value.includes('ISA*'));
+const hasGsSegment = computed(() => rawCodeText.value.includes('GS*'));
+
+/**
+ * Calculates pipeline tracking steps dynamically based on detected segments
+ */
+const pipelineProgressPercentage = computed(() => {
+  if (!rawCodeText.value.trim()) return 0;
+  let score = 20; 
+  if (hasIsaSegment.value) score += 30;
+  if (hasGsSegment.value) score += 30;
+  if (claims.value.length > 0) score += 20; 
+  return score;
+});
+
+/**
+ * Evaluates state strings to determine meter labeling configurations
+ */
+const progressStatusLabel = computed(() => {
+  if (!rawCodeText.value.trim()) return "Waiting for Data Stream";
+  if (claims.value.length > 0) return "Pipeline Clearance Verified";
+  if (hasIsaSegment.value || hasGsSegment.value) return "Decomposing Segments...";
+  return "Incomplete Structure";
+});
+
+/**
+ * Evaluates tracking values to alternate color styles dynamically
+ */
+const currentStateColor = computed(() => {
+  const percentage = pipelineProgressPercentage.value;
+  if (percentage === 0) return 'state-idle';
+  if (percentage === 100) return 'state-success';
+  if (percentage < 60) return 'state-error';
+  return 'state-warn';
+});
 
 // Financial metrics counters calculated reactively
 const totalAcceptedAmount = computed(() => {
@@ -76,17 +144,17 @@ const rejectedCount = computed(() => {
   return claims.value.filter(c => c.lane === 'rejected').length;
 });
 
-function toggleDragState(active: boolean) {
-  isDragOver.value = active;
-}
-
 /**
- * Handle files dropped into the neon viewport container
+ * Processes text input transformations inside textarea instantly
  */
-function handleFileDrop(e: DragEvent) {
-  toggleDragState(false);
-  const file = e.dataTransfer?.files[0];
-  if (file) readFileContent(file);
+function handleLiveTextParse() {
+  const codeContent = rawCodeText.value;
+  if (!codeContent.trim()) {
+    claims.value = [];
+    statusMessage.value = '';
+    return;
+  }
+  executePipelineParse(codeContent, "Live Code Stream");
 }
 
 /**
@@ -95,32 +163,33 @@ function handleFileDrop(e: DragEvent) {
 function handleManualFile(e: Event) {
   const target = e.target as HTMLInputElement;
   const file = target.files?.[0];
-  if (file) readFileContent(file);
+  if (file) {
+    statusMessage.value = `INGESTING: Processing parsing array loops for "${file.name}"...`;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawText = event.target?.result as string;
+      rawCodeText.value = rawText; 
+      executePipelineParse(rawText, file.name);
+    };
+    reader.readAsText(file);
+  }
 }
 
 /**
- * Reads data blocks out of local client storage targets
+ * Coordinates internal text strings with the Edi277ParserCore orchestration logic
  */
-function readFileContent(file: File) {
-  statusMessage.value = `INGESTING: Processing parsing array loops for "${file.name}"...`;
-  
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    const rawText = event.target?.result as string;
-    try {
-      // Execute the structural processing pipeline matrix
-      const processedResults = parserEngine.parse(rawText);
-      claims.value = processedResults;
-      statusMessage.value = `SUCCESS: Pipeline execution complete. Loaded ${processedResults.length} unique claims cleanly.`;
-    } catch (err) {
-      statusMessage.value = `CRITICAL FAILURE: Pipeline broken during matrix extraction loops. Ensure file is standard X12 format.`;
-      console.error(err);
-    }
-  };
-  reader.readAsText(file);
+function executePipelineParse(rawText: string, sourceName: string) {
+  try {
+    const processedResults = parserEngine.parse(rawText);
+    claims.value = processedResults;
+    statusMessage.value = `SUCCESS: [${sourceName}] translated cleanly. Generated ${processedResults.length} records.`;
+  } catch (err) {
+    claims.value = []; 
+    statusMessage.value = `CRITICAL FAILURE: Pipeline broken during matrix loops. Verify formatting layout.`;
+    console.error(err);
+  }
 }
 </script>
-
 <style scoped>
 .obsidian-app-container {
   min-height: 100vh;
@@ -155,8 +224,7 @@ function readFileContent(file: File) {
 }
 
 .neon-pulse-matrix {
-  width: 100%;
-  max-width: 10px;
+  width: 10px;
   height: 10px;
   background: #00d2ff;
   border-radius: 50%;
@@ -216,34 +284,30 @@ function readFileContent(file: File) {
   margin-top: 2px;
 }
 
+.interactive-stream-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+}
+
 .ingestion-dropzone-frame {
   background: rgba(14, 14, 18, 0.8);
-  border: 2px dashed rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 20px;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
 }
 
-.ingestion-dropzone-frame.drag-active {
-  border-color: #00d2ff;
-  background: rgba(0, 210, 255, 0.03);
-  box-shadow: 0 0 20px rgba(0, 210, 255, 0.1), inset 0 0 40px rgba(0, 210, 255, 0.05);
-}
-
-.dropzone-internal-glow {
+.stream-input-wrapper {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.terminal-prompt-row {
+.input-header-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
 }
 
 .terminal-caret {
@@ -255,11 +319,44 @@ function readFileContent(file: File) {
 
 .prompt-text-display {
   margin: 0;
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 700;
   letter-spacing: 0.5px;
   color: #a5a5b5;
   font-family: monospace;
+}
+
+.stream-code-textarea {
+  width: 100%;
+  height: 110px;
+  background: #060608;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #00ff66;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.stream-code-textarea:focus {
+  border-color: #00d2ff;
+}
+
+.alternative-action-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.status-msg-log {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: #8a8a9a;
 }
 
 .custom-file-upload-btn {
@@ -281,11 +378,95 @@ function readFileContent(file: File) {
   box-shadow: 0 0 12px rgba(0, 210, 255, 0.25);
 }
 
+.compact-btn {
+  padding: 6px 12px;
+  font-size: 0.65rem;
+}
+
 .hidden-file-input {
   display: none;
 }
 
+.pipeline-progress-gauge {
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hud-label-gauge {
+  font-size: 0.65rem;
+  color: #8a8a9a;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.meter-track-container {
+  width: 100%;
+  height: 28px;
+  background: #060608;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.meter-fill-bar {
+  height: 100%;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.state-idle { background: rgba(255, 255, 255, 0.05); }
+.state-error { background: #ff3333; box-shadow: 0 0 15px rgba(255, 51, 51, 0.4); }
+.state-warn { background: #ffaa00; box-shadow: 0 0 15px rgba(255, 170, 0, 0.4); }
+.state-success { background: #00ff66; box-shadow: 0 0 15px rgba(0, 255, 102, 0.4); }
+
+.meter-overlay-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.telemetry-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: monospace;
+  font-size: 0.65rem;
+  color: #6e6e7e;
+}
+
+.text-green { color: #00ff66; }
+.text-gray { color: #44444a; }
+
 .dashboard-canvas-workspace {
   flex: 1;
+}
+
+@media (max-width: 900px) {
+  .interactive-stream-grid {
+    grid-template-columns: 1fr;
+  }
+  .pipeline-progress-gauge {
+    border-left: none;
+    padding-left: 0;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 12px;
+  }
 }
 </style>
